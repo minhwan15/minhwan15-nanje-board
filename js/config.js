@@ -1,12 +1,12 @@
 // ① Firebase 콘솔 > 프로젝트 설정 > 내 앱(웹) 에서 복사한 값으로 바꿔 주세요.
 //    값이 'YOUR_'로 시작하면 이 브라우저 안에서만 도는 '데모 모드'로 실행됩니다.
 export const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT.firebaseapp.com',
-  projectId: 'YOUR_PROJECT',
-  storageBucket: 'YOUR_PROJECT.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID'
+  apiKey: 'AIzaSyBlC4wF2czhpya80K-G5LAVSDQKFi6qZ1M',
+  authDomain: 'nanje-board.firebaseapp.com',
+  projectId: 'nanje-board',
+  storageBucket: 'nanje-board.firebasestorage.app',
+  messagingSenderId: '210620532789',
+  appId: '1:210620532789:web:58f1e6de8f2ef72543897c'
 };
 
 // ② 모둠 주제 (모둠 수 = 주제 수). 순서가 난제 카드 순서와 같아야 합니다.
