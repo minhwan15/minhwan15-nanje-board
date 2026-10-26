@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 수업 코드(room)마다 게시물 모음. 학생은 읽기와 새 글 쓰기만 가능, 수정·삭제는 불가.
+    match /rooms/{room}/posts/{postId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['group', 'stage', 'data', 'createdAt'])
+        && request.resource.data.group is int
+        && request.resource.data.group >= 1 && request.resource.data.group <= 5
+        && request.resource.data.stage in ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment']
+        && request.resource.data.data is map
+        && request.resource.data.data.size() <= 12
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
