@@ -126,3 +126,23 @@ textarea { min-height: 70px; resize: vertical; }
 .img-big { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .img-big img { max-width: 92vw; max-height: 82vh; background: #fff; border-radius: 12px; }
 .img-big figcaption { color: #fff; font-size: 24px; font-weight: 700; }
+
+/* ---------- 진행 모니터·반 전체 정리 ---------- */
+.ago { font-weight: 500; color: #B9D3CF; }
+.ago.stale { color: #1A1A1A; background: var(--yellow); border-radius: 6px; padding: 0 6px; margin-left: 6px; font-weight: 900; }
+.b-side { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.sum-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; }
+.sum-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.sum-card h2 { margin: 0; font-size: 26px; color: var(--navy); line-height: 1.3; }
+.sum-bar { display: flex; height: 56px; border-radius: 12px; overflow: hidden; }
+.sum-bar .seg { display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; color: #fff; min-width: 0; white-space: nowrap; overflow: hidden; }
+.sum-bar .G { background: var(--green); } .sum-bar .Y { background: var(--yellow); color: #1A1A1A; } .sum-bar .R { background: var(--red); }
+.sum-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; font-size: 18px; line-height: 1.5; }
+.sum-row { border-bottom: 1px dashed var(--line); padding-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+.sum-g b { color: var(--navy); margin-right: 8px; } .sum-g span { color: var(--soft); font-size: 15px; }
+.sum-v { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.sum-v .arrow { font-size: 24px; font-weight: 900; color: var(--orange); display: flex; flex-direction: column; align-items: center; }
+.sum-c { font-size: 15px; }
+.sum-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 16px; color: var(--soft); }
+.sum-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; }
+.sum-legend i.G { background: var(--green); } .sum-legend i.Y { background: var(--yellow); } .sum-legend i.R { background: var(--red); }

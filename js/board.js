@@ -32,12 +32,13 @@ async function start(code) {
     return;
   }
   let data = { latest: {}, comments: [], free: [] };
+  let rows = [];
   let bigImg = null; // { src, cap }
   let updated = 0;
   let view = store('nb_view') || 'all';
   let focus = 0;
   const seen = {};
-  const VIEWS = [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림']];
+  const VIEWS = [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']];
   const studentUrl = location.origin + location.pathname.replace(/board(\.html)?$/, '') + '?room=' + encodeURIComponent(room.room);
 
   // QR: 보드 위에는 중간 크기, 누르면 화면 가득 크게
@@ -140,6 +141,14 @@ async function start(code) {
     return out;
   }
 
+  // 마지막으로 올린 뒤 지난 시간. v2 전인데 8분 넘게 소식이 없으면 경고
+  function ago(t, finished) {
+    if (!t) return null;
+    const m = Math.floor((Date.now() - t) / 60000);
+    const stale = !finished && m >= 8;
+    return h('span', { class: 'ago' + (stale ? ' stale' : ''), text: stale ? m + '분째 정체' : '  ' + (m ? m + '분 전' : '방금') });
+  }
+
   function column(g, big) {
     const l = data.latest[g] || {};
     const cur = stageOf(g);
@@ -150,12 +159,75 @@ async function start(code) {
     return h('section', { class: 'col' + (fresh ? ' fresh' : ''), tabindex: '0', 'aria-label': g + '모둠', onclick: toggle,
       onkeydown: (e) => { if (e.key === 'Enter') toggle(); } }, [
       h('header', { class: 'col-h' }, [
-        h('div', { class: 'n', text: g + '모둠' + (cur ? ' · 지금 ' + STAGES.find((s) => s.key === cur).short : '') }),
+        h('div', { class: 'n' }, [g + '모둠' + (cur ? ' · 지금 ' + STAGES.find((s) => s.key === cur).short : ''), ago(latestT, !!l.v2)]),
         h('div', { class: 't', text: TOPICS[g - 1] }),
         h('div', { class: 'dots', 'aria-hidden': 'true' }, STAGES.map((s) => h('span', { class: 'dot' + (l[s.key] ? (s.key === cur ? ' now' : ' on') : '') })))
       ]),
       h('div', { class: 'col-b' }, content(g))
     ]);
+  }
+
+  // 반 전체 정리: AI 주장 신호등 집계 + 모둠별 v1 → v2
+  function summaryView() {
+    const all = [];
+    TOPICS.forEach((t, i) => {
+      const sg = data.latest[i + 1] && data.latest[i + 1].signal;
+      ((sg && sg.d.rows) || []).forEach((r) => { if (r.claim && r.light) all.push({ g: i + 1, ...r }); });
+    });
+    const n = { G: 0, Y: 0, R: 0 };
+    all.forEach((r) => { n[r.light] = (n[r.light] || 0) + 1; });
+    const total = all.length;
+    const pct = (k) => (total ? Math.round((n[k] / total) * 100) : 0);
+    const bar = h('div', { class: 'sum-bar', role: 'img', 'aria-label': '초록 ' + n.G + ', 노랑 ' + n.Y + ', 빨강 ' + n.R },
+      ['G', 'Y', 'R'].map((k) => (n[k] ? h('div', { class: 'seg ' + k, style: 'flex:' + n[k], text: String(n[k]) }) : null)));
+    const legend = h('div', { class: 'sum-legend' }, ['G', 'Y', 'R'].map((k) => h('span', null, [h('i', { class: k }), ({ G: '초록 확인됨 ', Y: '노랑 확인 못 함 ', R: '빨강 틀림·출처 없음 ' })[k] + n[k] + '개 (' + pct(k) + '%)'])));
+    const reds = all.filter((r) => r.light !== 'G');
+    const left = h('section', { class: 'sum-card' }, [
+      h('h2', { text: 'AI 주장 ' + total + '개 중, 그대로 믿을 수 있었던 것은 ' + n.G + '개' }),
+      total ? h('div', null, [bar, legend]) : h('div', { class: 'empty', text: '아직 신호등 판정이 없어요' }),
+      reds.length ? h('div', { class: 'lbl', text: '확인되지 않은 AI 주장' }) : null,
+      h('div', { class: 'sum-list' }, reds.map((r) => h('div', { class: 'sig' }, [h('i', { class: r.light }),
+        h('div', null, [h('div', { class: 'box', text: r.claim }), h('div', { class: 'muted', text: r.g + '모둠' + (r.source ? ' · ' + r.source : '') })])])))
+    ]);
+    const right = h('section', { class: 'sum-card' }, [
+      h('h2', { text: 'AI 반론을 거쳐 해결책은 어떻게 바뀌었나' }),
+      h('div', { class: 'sum-list' }, TOPICS.map((t, i) => {
+        const l = data.latest[i + 1] || {};
+        const v1 = l.v1 && l.v1.d, v2 = l.v2 && l.v2.d, rb = l.rebut && l.rebut.d;
+        const dec = ((rb && rb.rows) || []).filter((r) => r.decision);
+        const acc = dec.filter((r) => r.decision === '수용').length, reb = dec.length - acc;
+        return h('div', { class: 'sum-row' }, [
+          h('div', { class: 'sum-g' }, [h('b', { text: (i + 1) + '모둠' }), h('span', { text: t })]),
+          h('div', { class: 'sum-v' }, [
+            h('div', { class: 'box', text: (v1 && v1.solution) || 'v1 대기 중' }),
+            h('div', { class: 'arrow' }, [dec.length ? h('span', { class: 'chip acc', text: '수용 ' + acc }) : null, dec.length ? h('span', { class: 'chip reb', text: '반박 ' + reb }) : null, '→']),
+            h('div', { class: 'box v2', text: (v2 && v2.solution) || 'v2 대기 중' })
+          ]),
+          v2 && v2.changed ? h('div', { class: 'muted sum-c', text: '바뀐 점: ' + v2.changed }) : null
+        ]);
+      }))
+    ]);
+    return h('div', { class: 'sum-grid' }, [left, right]);
+  }
+
+  // 수업 기록을 엑셀에서 열리는 CSV로 저장 (세특·수업 성찰 근거용)
+  function exportCsv() {
+    const LBL = { map: '① 마인드맵', compare: '② AI 비교', signal: '③ 신호등', v1: '④ 해결책 v1', rebut: '⑤ AI 반론', v2: '⑥ 해결책 v2', comment: '댓글', free: '자유 게시' };
+    const K = { env: '환경', eco: '경제', soc: '사회', tech: '기술', science: '과학 원리', common: '공통점', aiOnly: 'AI만', usOnly: '우리만',
+      solution: '해결책', principle: '작동 원리', fields: '융합 학문', changed: '바뀐 점', to: '받는 모둠', good: '좋은 점', question: '궁금한 점', memo: '설명',
+      claim: '주장', source: '근거', light: '판정', summary: '반론', decision: '판단', reason: '이유' };
+    const LIGHT = { G: '초록', Y: '노랑', R: '빨강' };
+    const flat = (d) => Object.keys(d).filter((k) => k !== 'img').map((k) => {
+      const v = d[k];
+      if (k === 'rows') return v.map((r, i) => (i + 1) + ') ' + Object.keys(r).filter((x) => r[x]).map((x) => (K[x] || x) + ': ' + (x === 'light' ? LIGHT[r[x]] : r[x])).join(', ')).join(' / ');
+      return (K[k] || k) + ': ' + (Array.isArray(v) ? v.join('·') : v);
+    }).filter((x) => !/: $/.test(x)).join(' | ') + (d.img ? ' | [사진·그림 첨부]' : '');
+    const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+    const lines = [['시각', '모둠', '주제', '단계', '내용']].concat(rows.map((r) => [
+      new Date(r.t).toLocaleString('ko-KR'), r.g + '모둠', TOPICS[r.g - 1] || '', LBL[r.s] || r.s, flat(r.d || {})]));
+    const blob = new Blob(['\ufeff' + lines.map((l) => l.map(esc).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: '난제보드_' + room.room + '.csv' });
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
   function render() {
@@ -167,9 +239,12 @@ async function start(code) {
       h('span', { class: 'sp' }),
       tabs,
       h('div', { class: 'joinbox' }, [qrNode(), h('div', null, [h('div', { class: 'code', text: room.room }), h('div', { class: 'url', text: studentUrl }), h('div', { class: 'muted', text: 'QR을 누르면 크게 보여요' })])]),
-      h('span', { class: 'b-meta', text: updated ? '갱신 ' + new Date(updated).toLocaleTimeString('ko-KR') : '연결 중…' })
+      h('div', { class: 'b-side' }, [
+        h('span', { class: 'b-meta', text: updated ? '갱신 ' + new Date(updated).toLocaleTimeString('ko-KR') : '연결 중…' }),
+        h('button', { type: 'button', class: 'btn-ghost', text: '기록 저장(엑셀)', onclick: exportCsv })
+      ])
     ]);
-    const grid = h('div', { class: 'b-grid' }, TOPICS.map((t, i) => column(i + 1, false)));
+    const grid = view === 'summary' ? summaryView() : h('div', { class: 'b-grid' }, TOPICS.map((t, i) => column(i + 1, false)));
     root.replaceChildren(h('main', { class: 'b-wrap' }, [isDemo ? demoBanner() : null, top, grid]));
     if (focus) {
       const ov = h('div', { class: 'ov', onclick: (e) => { if (e.target === ov) { focus = 0; render(); } } }, [column(focus, true)]);
@@ -204,7 +279,9 @@ async function start(code) {
     }
     if (bigImg) { bigImg = null; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
   });
-  room.subscribe((rows) => { data = summarize(rows); updated = Date.now(); render(); },
+  room.subscribe((r) => { rows = r; data = summarize(r); updated = Date.now(); render(); },
     (err) => toast('연결이 끊겼어요: ' + err.message));
   render();
+  // '몇 분 전' 표시 갱신 (크게 보기 중에는 건너뜀)
+  setInterval(() => { if (!focus && !bigImg && !bigQr) render(); }, 30000);
 }
