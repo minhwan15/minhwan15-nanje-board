@@ -1,6 +1,7 @@
 import { TOPICS, SCIENCE_HINTS } from './config.js';
 import { openRoom, summarize, isDemo } from './store.js';
 import { STAGES, FIELDS_OF_STUDY, h, toast, store, param, demoBanner } from './ui.js';
+import { attachWidget } from './media.js';
 
 const root = document.getElementById('app');
 const roomCode = param('room');
@@ -32,7 +33,8 @@ async function start(code) {
   const keyG = 'nb_group_' + room.room;
   let group = Number(store(keyG)) || 0;
   let tab = store('nb_tab') || 'map';
-  let summary = { latest: {}, comments: [] };
+  let summary = { latest: {}, comments: [], free: [] };
+  let att = null; // 현재 폼의 사진·그림 첨부
 
   const headBox = h('div');
   const formBox = h('div');
@@ -42,7 +44,7 @@ async function start(code) {
   const prevData = () => (mine()[tab] && mine()[tab].d) || {};
 
   function renderHead() {
-    const tabs = STAGES.concat([{ key: 'comment', label: '댓글 평가' }]);
+    const tabs = STAGES.concat([{ key: 'comment', label: '댓글 평가' }, { key: 'free', label: '자유 게시(사진·그림)' }]);
     headBox.replaceChildren(h('header', { class: 's-head' }, [
       h('h1', { text: '난제 해결 라이브 보드' }),
       h('div', { class: 'room', text: '수업 코드 ' + room.room }),
@@ -51,7 +53,7 @@ async function start(code) {
         h('button', { type: 'button', 'aria-pressed': String(group === i + 1), onclick: () => { group = i + 1; store(keyG, String(group)); renderAll(); } },
           [h('b', { text: (i + 1) + '모둠' }), h('span', { text: t })]))),
       group ? h('nav', { class: 'tabs', role: 'tablist' }, tabs.map((s) =>
-        h('button', { type: 'button', role: 'tab', 'aria-selected': String(tab === s.key), class: mine()[s.key] ? 'done' : '', text: s.label,
+        h('button', { type: 'button', role: 'tab', 'aria-selected': String(tab === s.key), class: (mine()[s.key] || (s.key === 'free' && summary.free.some((f) => f.g === group))) ? 'done' : '', text: s.label,
           onclick: () => { tab = s.key; store('nb_tab', tab); renderAll(); } }))) : null
     ]));
   }
@@ -145,10 +147,29 @@ async function start(code) {
           h('div', { class: 'recv' }, [h('b', { text: c.g + '모둠: ' }), '좋은 점 ' + (c.d.good || '-') + ' · 궁금한 점 ' + (c.d.question || '-')])))) : null
       ];
     }
+    if (tab === 'free') {
+      const minePosts = summary.free.filter((f) => f.g === group).slice(-6).reverse();
+      return [
+        h('h2', { text: '자유 게시' }),
+        h('div', { class: 'hint', text: '종이에 그린 마인드맵, 실험·자료 사진, 직접 그린 그림을 언제든 올려요. 여러 장 올려도 돼요.' }),
+        att.el,
+        area('memo', '한 줄 설명', { ph: '예: 우리 모둠 손 마인드맵, 해수 담수화 원리 그림' }),
+        minePosts.length ? h('div', { class: 'f' }, [h('b', { text: '우리 모둠이 올린 것' }),
+          h('div', { class: 'mini-gal' }, minePosts.map((f) => h('figure', null, [
+            f.d.img ? h('img', { src: f.d.img, alt: f.d.memo || '올린 그림' }) : null,
+            h('figcaption', { text: f.d.memo || '' })])))]) : null
+      ];
+    }
     return [];
   }
 
   function collect(box) {
+    const d = collectFields(box);
+    const img = att ? att.get() : '';
+    if (img) d.img = img;
+    return d;
+  }
+  function collectFields(box) {
     if (tab === 'signal' || tab === 'rebut') {
       return { rows: Array.from(box.querySelectorAll('[data-row]')).map((row) => {
         const o = {};
@@ -175,14 +196,19 @@ async function start(code) {
     if (tab === 'rebut' && !(d.rows || []).some((r) => r.decision === '반박')) return '반론 하나는 반드시 반박해야 해요.';
     if (tab === 'v2' && (!d.solution || !d.changed)) return 'v2와 바뀐 점을 모두 적어 주세요.';
     if (tab === 'comment' && !d.good && !d.question) return '댓글 내용을 적어 주세요.';
-    if (JSON.stringify(d).length > 8000) return '내용이 너무 길어요. 조금 줄여 주세요.';
+    if (tab === 'free' && !d.img && !d.memo) return '사진·그림이나 설명을 올려 주세요.';
+    const { img, ...rest } = d;
+    if (JSON.stringify(rest).length > 8000) return '내용이 너무 길어요. 조금 줄여 주세요.';
     return '';
   }
 
   function renderForm() {
     if (!group) { formBox.replaceChildren(h('div', { class: 'card' }, [h('h2', { text: '먼저 우리 모둠을 눌러 주세요' })])); return; }
     const card = h('section', { class: 'card' });
-    fields().forEach((el) => { if (el) card.appendChild(el); });
+    att = tab === 'comment' ? null : attachWidget(tab === 'free' ? '' : prevData().img);
+    const list = fields();
+    if (att && tab !== 'free') list.push(att.el);
+    list.forEach((el) => { if (el) card.appendChild(el); });
     const btn = h('button', { type: 'button', class: 'submit', text: tab === 'comment' ? '댓글 남기기' : '보드에 올리기' });
     btn.addEventListener('click', async () => {
       const d = collect(card);
@@ -192,6 +218,7 @@ async function start(code) {
       try {
         await room.submit(group, tab, d);
         toast(tab === 'comment' ? '댓글을 남겼어요' : '보드에 올라갔어요');
+        await new Promise((r) => setTimeout(r, 300)); // 내 글이 목록에 들어온 뒤 다시 그리기
         renderForm();
       } catch (e) {
         toast('올리지 못했어요: ' + e.message);
@@ -199,7 +226,7 @@ async function start(code) {
       }
     });
     card.appendChild(btn);
-    if (mine()[tab]) card.appendChild(h('div', { class: 'muted', text: '마지막으로 올린 시각 ' + new Date(mine()[tab].t).toLocaleTimeString('ko-KR') + ' · 고쳐서 다시 올려도 돼요' }));
+    if (tab !== 'free' && mine()[tab]) card.appendChild(h('div', { class: 'muted', text: '마지막으로 올린 시각 ' + new Date(mine()[tab].t).toLocaleTimeString('ko-KR') + ' · 고쳐서 다시 올려도 돼요' }));
     formBox.replaceChildren(card);
   }
 

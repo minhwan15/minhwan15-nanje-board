@@ -31,12 +31,13 @@ async function start(code) {
     root.replaceChildren(h('div', { class: 'setup' }, [h('div', { class: 'err', text: '연결하지 못했어요: ' + e.message })]));
     return;
   }
-  let data = { latest: {}, comments: [] };
+  let data = { latest: {}, comments: [], free: [] };
+  let bigImg = null; // { src, cap }
   let updated = 0;
   let view = store('nb_view') || 'all';
   let focus = 0;
   const seen = {};
-  const VIEWS = [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글']];
+  const VIEWS = [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림']];
   const studentUrl = location.origin + location.pathname.replace(/board(\.html)?$/, '') + '?room=' + encodeURIComponent(room.room);
 
   // QR: 보드 위에는 중간 크기, 누르면 화면 가득 크게
@@ -72,7 +73,26 @@ async function start(code) {
     return h('div', null, [h('div', { class: 'lbl', text: label }), h('div', { class: 'box ' + (cls || ''), text: value })]);
   }
 
+  function pic(src, cap) {
+    if (!src) return null;
+    return h('figure', { class: 'pic' }, [
+      h('img', { src, alt: cap || '모둠이 올린 그림', loading: 'lazy', onclick: (e) => { e.stopPropagation(); bigImg = { src, cap }; render(); } }),
+      cap ? h('figcaption', { text: cap }) : null
+    ]);
+  }
+  const freeOf = (g) => data.free.filter((f) => Number(f.g) === g).slice().reverse();
+
   function content(g) {
+    const out = body(g);
+    // 전체 진행 화면에서는 단계 내용 아래에 최근 자유 게시 사진 2장까지
+    if (view === 'all') {
+      const fr = freeOf(g).slice(0, 2);
+      if (fr.length) out.push(h('div', { class: 'lbl', text: '자유 게시' }), ...fr.map((f) => pic(f.d.img, f.d.memo) || box('', f.d.memo)));
+    }
+    return out;
+  }
+
+  function body(g) {
     const l = data.latest[g] || {};
     const out = [];
     const v = view === 'all' ? stageOf(g) : view;
@@ -80,10 +100,10 @@ async function start(code) {
     if (v === 'map') {
       const d = l.map && l.map.d;
       if (!d) return [h('div', { class: 'empty', text: '마인드맵 대기 중' })];
-      out.push(box('핵심 과학 원리', d.science, 'sci'), box('환경', d.env), box('경제', d.eco), box('사회', d.soc), box('기술', d.tech));
+      out.push(pic(d.img, '마인드맵 그림'), box('핵심 과학 원리', d.science, 'sci'), box('환경', d.env), box('경제', d.eco), box('사회', d.soc), box('기술', d.tech));
     } else if (v === 'compare') {
       const d = l.compare.d;
-      out.push(box('공통점', d.common), box('AI만 말한 것', d.aiOnly), box('우리만 말한 것', d.usOnly));
+      out.push(box('공통점', d.common), box('AI만 말한 것', d.aiOnly), box('우리만 말한 것', d.usOnly), pic(d.img));
     } else if (v === 'signal') {
       const d = l.signal && l.signal.d;
       if (!d) return [h('div', { class: 'empty', text: '신호등 판정 대기 중' })];
@@ -94,23 +114,28 @@ async function start(code) {
         out.push(h('div', { class: 'sig' }, [h('i', { class: r.light || '', 'aria-label': ({ G: '초록', Y: '노랑', R: '빨강' })[r.light] || '미판정' }),
           h('div', null, [h('div', { class: 'box', text: r.claim }), r.source ? h('div', { class: 'muted', text: '근거: ' + r.source }) : null])]));
       });
+      out.push(pic(d.img));
     } else if (v === 'v1' || v === 'rebut' || v === 'v2' || v === 'solution') {
       const v1 = l.v1 && l.v1.d, rb = l.rebut && l.rebut.d, v2 = l.v2 && l.v2.d;
       if (!v1 && !v2) return [h('div', { class: 'empty', text: '해결책 대기 중' })];
       if (v1) {
         out.push(box('해결책 v1', v1.solution));
         if (v1.fields && v1.fields.length) out.push(h('div', null, v1.fields.map((f) => h('span', { class: 'chip', text: f }))));
-        out.push(box('작동 원리', v1.principle, 'sci'));
+        out.push(box('작동 원리', v1.principle, 'sci'), pic(v1.img, 'v1 그림'));
       }
       if (rb) out.push(h('div', null, [h('div', { class: 'lbl', text: 'AI 반론에 대한 판단' })].concat((rb.rows || []).map((r, i) => {
         if (!r.summary && !r.decision) return null;
         return h('div', { class: 'box' }, [h('span', { class: 'chip ' + (r.decision === '반박' ? 'reb' : 'acc'), text: ['사회', '경제', '윤리'][i] + ' · ' + (r.decision || '?') }), r.summary || '']);
       }))));
-      if (v2) out.push(box('해결책 v2', v2.solution, 'v2'), box('바뀐 점', v2.changed));
+      if (v2) out.push(box('해결책 v2', v2.solution, 'v2'), box('바뀐 점', v2.changed), pic(v2.img, 'v2 그림'));
     } else if (v === 'comment') {
       const cs = data.comments.filter((c) => Number(c.d.to) === g);
       if (!cs.length) return [h('div', { class: 'empty', text: '받은 댓글이 없어요' })];
       cs.forEach((c) => out.push(h('div', { class: 'box' }, [h('b', { text: c.g + '모둠  ' }), '좋은 점 ' + (c.d.good || '-') + ' · 궁금한 점 ' + (c.d.question || '-')])));
+    } else if (v === 'free') {
+      const fr = freeOf(g);
+      if (!fr.length) return [h('div', { class: 'empty', text: '올린 사진·그림이 없어요' })];
+      fr.forEach((f) => out.push(pic(f.d.img, f.d.memo) || box('', f.d.memo)));
     }
     return out;
   }
@@ -118,7 +143,7 @@ async function start(code) {
   function column(g, big) {
     const l = data.latest[g] || {};
     const cur = stageOf(g);
-    const latestT = Math.max(0, ...Object.keys(l).map((k) => l[k].t));
+    const latestT = Math.max(0, ...Object.keys(l).map((k) => l[k].t), ...freeOf(g).map((f) => f.t));
     const fresh = !big && seen[g] !== undefined && latestT > seen[g];
     if (!big) seen[g] = latestT;
     const toggle = () => { focus = big ? 0 : g; render(); };
@@ -150,6 +175,12 @@ async function start(code) {
       const ov = h('div', { class: 'ov', onclick: (e) => { if (e.target === ov) { focus = 0; render(); } } }, [column(focus, true)]);
       root.appendChild(ov);
     }
+    if (bigImg) {
+      root.appendChild(h('div', { class: 'ov img-ov', onclick: () => { bigImg = null; render(); } }, [
+        h('figure', { class: 'img-big' }, [h('img', { src: bigImg.src, alt: bigImg.cap || '크게 본 그림' }),
+          bigImg.cap ? h('figcaption', { text: bigImg.cap }) : null])
+      ]));
+    }
     if (bigQr) {
       const img = qrImg(12);
       root.appendChild(h('div', { class: 'ov qr-ov', onclick: () => { bigQr = false; render(); } }, [
@@ -165,7 +196,13 @@ async function start(code) {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
+    if (bigImg) {
+      root.appendChild(h('div', { class: 'ov img-ov', onclick: () => { bigImg = null; render(); } }, [
+        h('figure', { class: 'img-big' }, [h('img', { src: bigImg.src, alt: bigImg.cap || '크게 본 그림' }),
+          bigImg.cap ? h('figcaption', { text: bigImg.cap }) : null])
+      ]));
+    }
+    if (bigImg) { bigImg = null; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
   });
   room.subscribe((rows) => { data = summarize(rows); updated = Date.now(); render(); },
     (err) => toast('연결이 끊겼어요: ' + err.message));

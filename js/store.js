@@ -1,7 +1,7 @@
 // 데이터 저장소: Firebase Firestore(실시간) 또는 설정 전 데모 모드(이 브라우저 안에서만)
 import { firebaseConfig } from './config.js';
 
-export const STAGE_KEYS = ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment'];
+export const STAGE_KEYS = ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment', 'free'];
 export const isDemo = String(firebaseConfig.apiKey || '').startsWith('YOUR_');
 
 function cleanRoom(room) {
@@ -62,15 +62,17 @@ function demoStore(room) {
   };
 }
 
-/** 행 목록 → 모둠·단계별 최신 + 댓글 */
+/** 행 목록 → 모둠·단계별 최신 + 댓글 + 자유 게시 */
 export function summarize(rows) {
   const latest = {};
   const comments = [];
+  const free = [];
   rows.forEach((r) => {
     if (r.s === 'comment') { comments.push(r); return; }
+    if (r.s === 'free') { free.push(r); return; }
     latest[r.g] = latest[r.g] || {};
     const prev = latest[r.g][r.s];
     if (!prev || prev.t <= r.t) latest[r.g][r.s] = { t: r.t, d: r.d };
   });
-  return { latest, comments };
+  return { latest, comments, free };
 }

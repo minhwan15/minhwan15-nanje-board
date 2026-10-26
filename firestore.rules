@@ -7,9 +7,12 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasOnly(['group', 'stage', 'data', 'createdAt'])
         && request.resource.data.group is int
         && request.resource.data.group >= 1 && request.resource.data.group <= 5
-        && request.resource.data.stage in ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment']
+        && request.resource.data.stage in ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment', 'free']
         && request.resource.data.data is map
         && request.resource.data.data.size() <= 12
+        // 사진·그림(img)은 태블릿에서 줄인 JPEG 문자열, 50만 자 이하
+        && (!('img' in request.resource.data.data)
+            || (request.resource.data.data.img is string && request.resource.data.data.img.size() <= 500000))
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
     }
