@@ -4,7 +4,7 @@ import { h, toast } from './ui.js';
 export const MAX_IMG_CHARS = 450000; // 약 330KB
 
 function canvasToJpeg(canvas) {
-  let q = 0.8;
+  let q = 0.82;
   let url = canvas.toDataURL('image/jpeg', q);
   while (url.length > MAX_IMG_CHARS && q > 0.35) {
     q -= 0.1;
@@ -23,7 +23,7 @@ function loadImage(src) {
   });
 }
 
-export async function fileToDataUrl(file, max = 1200) {
+export async function fileToDataUrl(file, max = 1600) {
   if (!file || !/^image\//.test(file.type)) throw new Error('사진 파일만 올릴 수 있어요.');
   const url = URL.createObjectURL(file);
   try {

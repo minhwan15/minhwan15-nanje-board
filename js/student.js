@@ -17,7 +17,7 @@ function showJoin() {
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   root.replaceChildren(h('main', { class: 'setup' }, [
-    h('h1', { text: '난제 해결 라이브 보드' }),
+    h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '난제 해결 라이브 보드']),
     h('p', { class: 'muted', text: '칠판에 적힌 수업 코드를 입력하거나 화면의 QR 코드를 찍어 주세요.' }),
     h('div', { class: 'join' }, [input, h('button', { type: 'button', text: '들어가기', onclick: go })]),
     isDemo ? demoBanner() : null
@@ -46,7 +46,7 @@ async function start(code) {
   function renderHead() {
     const tabs = STAGES.concat([{ key: 'comment', label: '댓글 평가' }, { key: 'free', label: '자유 게시(사진·그림)' }]);
     headBox.replaceChildren(h('header', { class: 's-head' }, [
-      h('h1', { text: '난제 해결 라이브 보드' }),
+      h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '난제 해결 라이브 보드']),
       h('div', { class: 'room', text: '수업 코드 ' + room.room }),
       h('div', { class: 'muted', text: '우리 모둠을 고르고, 단계가 끝날 때마다 올리면 앞 화면에 바로 떠요.' }),
       h('div', { class: 'groups', role: 'group', 'aria-label': '모둠 선택' }, TOPICS.map((t, i) =>

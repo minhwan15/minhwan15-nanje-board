@@ -18,7 +18,7 @@ function showSetup() {
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   root.replaceChildren(h('main', { class: 'setup' }, [
-    h('h1', { text: '교실 화면 열기' }),
+    h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구 · 난제 해결 라이브 보드' }), '교실 화면 열기']),
     h('p', { class: 'muted', text: '수업마다 새 코드를 쓰면 빈 보드에서 시작합니다. 반과 날짜를 넣어 두면 나중에 기록을 다시 볼 수 있어요. (예: 6반-1106, 8반-1106, 리허설)' }),
     h('div', { class: 'join' }, [input, h('button', { type: 'button', text: '보드 열기', onclick: go })]),
     isDemo ? demoBanner() : null
@@ -230,11 +230,69 @@ async function start(code) {
     document.body.appendChild(a); a.click(); a.remove();
   }
 
+  // 그림 크게 보기: 화면 가득 맞춤 → 누르거나 + 로 확대, 끌어서 이동
+  let zoom = 1;
+  function viewer(item) {
+    const img = h('img', { src: item.src, alt: item.cap || '크게 본 그림', draggable: 'false' });
+    const stage = h('div', { class: 'iv-stage' }, [img]);
+    const label = h('span', { class: 'iv-z' });
+    function fit() {
+      if (!img.naturalWidth) return;
+      const sw = stage.clientWidth, sh = stage.clientHeight;
+      const base = Math.min(sw / img.naturalWidth, sh / img.naturalHeight);
+      const w = img.naturalWidth * base * zoom;
+      img.style.width = w + 'px';
+      img.style.height = (img.naturalHeight * base * zoom) + 'px';
+      label.textContent = Math.round(zoom * 100) + '%';
+      stage.classList.toggle('zoomed', zoom > 1);
+    }
+    const setZ = (z, cx, cy) => {
+      const old = zoom;
+      zoom = Math.max(1, Math.min(5, z));
+      // 누른 지점이 화면에서 제자리에 있도록 스크롤 보정
+      const r = stage.getBoundingClientRect();
+      const px = (cx === undefined ? r.width / 2 : cx - r.left), py = (cy === undefined ? r.height / 2 : cy - r.top);
+      const sx = (stage.scrollLeft + px) / old, sy = (stage.scrollTop + py) / old;
+      fit();
+      stage.scrollLeft = sx * zoom - px; stage.scrollTop = sy * zoom - py;
+    };
+    img.addEventListener('load', fit);
+    if (img.complete) requestAnimationFrame(fit);
+    // 끌어서 이동, 짧게 누르면 확대/맞춤 전환
+    let drag = null;
+    stage.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, l: stage.scrollLeft, t: stage.scrollTop, moved: false, onImg: e.target === img }; stage.setPointerCapture(e.pointerId); });
+    stage.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
+      stage.scrollLeft = drag.l - dx; stage.scrollTop = drag.t - dy;
+    });
+    stage.addEventListener('pointerup', (e) => {
+      const d = drag; drag = null;
+      if (!d || d.moved) return;
+      if (d.onImg) setZ(zoom > 1 ? 1 : 2.5, e.clientX, e.clientY);
+      else if (zoom === 1) close();
+    });
+    stage.addEventListener('wheel', (e) => { e.preventDefault(); setZ(zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY); }, { passive: false });
+    function close() { bigImg = null; zoom = 1; render(); }
+    return h('div', { class: 'img-ov', role: 'dialog', 'aria-label': '그림 크게 보기' }, [
+      h('div', { class: 'iv-bar' }, [
+        h('span', { class: 'iv-cap', text: item.cap || '' }),
+        h('button', { type: 'button', text: '−', 'aria-label': '축소', onclick: () => setZ(zoom / 1.5) }),
+        label,
+        h('button', { type: 'button', text: '+', 'aria-label': '확대', onclick: () => setZ(zoom * 1.5) }),
+        h('button', { type: 'button', text: '맞춤', onclick: () => setZ(1) }),
+        h('button', { type: 'button', text: '닫기 ✕', onclick: close })
+      ]),
+      stage
+    ]);
+  }
+
   function render() {
     const tabs = h('div', { class: 'b-tabs', role: 'tablist' }, VIEWS.map((v) =>
       h('button', { type: 'button', role: 'tab', 'aria-selected': String(view === v[0]), text: v[1], onclick: () => { view = v[0]; store('nb_view', view); render(); } })));
     const top = h('header', { class: 'b-top' }, [
-      h('h1', { text: '난제 해결 라이브 보드' }),
+      h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '난제 해결 라이브 보드']),
       h('span', { class: 'q', text: 'AI가 알려 준 답, 그대로 믿고 난제를 풀 수 있을까?' }),
       h('span', { class: 'sp' }),
       tabs,
@@ -250,12 +308,7 @@ async function start(code) {
       const ov = h('div', { class: 'ov', onclick: (e) => { if (e.target === ov) { focus = 0; render(); } } }, [column(focus, true)]);
       root.appendChild(ov);
     }
-    if (bigImg) {
-      root.appendChild(h('div', { class: 'ov img-ov', onclick: () => { bigImg = null; render(); } }, [
-        h('figure', { class: 'img-big' }, [h('img', { src: bigImg.src, alt: bigImg.cap || '크게 본 그림' }),
-          bigImg.cap ? h('figcaption', { text: bigImg.cap }) : null])
-      ]));
-    }
+    if (bigImg) root.appendChild(viewer(bigImg));
     if (bigQr) {
       const img = qrImg(12);
       root.appendChild(h('div', { class: 'ov qr-ov', onclick: () => { bigQr = false; render(); } }, [
@@ -277,7 +330,7 @@ async function start(code) {
           bigImg.cap ? h('figcaption', { text: bigImg.cap }) : null])
       ]));
     }
-    if (bigImg) { bigImg = null; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
+    if (bigImg) { bigImg = null; zoom = 1; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
   });
   room.subscribe((r) => { rows = r; data = summarize(r); updated = Date.now(); render(); },
     (err) => toast('연결이 끊겼어요: ' + err.message));
