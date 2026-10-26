@@ -39,18 +39,26 @@ async function start(code) {
   const VIEWS = [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글']];
   const studentUrl = location.origin + location.pathname.replace(/board(\.html)?$/, '') + '?room=' + encodeURIComponent(room.room);
 
-  function qrNode() {
-    const box = h('div', { class: 'qr', 'aria-label': '학생 접속 QR 코드' });
+  // QR: 보드 위에는 중간 크기, 누르면 화면 가득 크게
+  function qrImg(cell) {
     try {
       // eslint-disable-next-line no-undef
-      const qr = qrcode(0, 'M');
+      const qr = qrcode(0, 'L');
       qr.addData(studentUrl);
       qr.make();
-      box.innerHTML = qr.createImgTag(3, 2);
-    } catch (e) { /* QR 라이브러리를 못 불러오면 주소만 보여 준다 */ }
+      const img = document.createElement('img');
+      img.src = qr.createDataURL(cell, 4);
+      img.alt = '학생 접속 QR 코드';
+      return img;
+    } catch (e) { return null; }
+  }
+  let bigQr = false;
+  function qrNode() {
+    const img = qrImg(6);
+    const box = h('button', { type: 'button', class: 'qr', title: '눌러서 크게 보기', onclick: () => { bigQr = true; render(); } });
+    if (img) box.appendChild(img); else box.appendChild(h('span', { class: 'muted', text: 'QR 없음' }));
     return box;
   }
-  const qrBox = qrNode();
 
   function stageOf(g) {
     const l = data.latest[g] || {};
@@ -133,7 +141,7 @@ async function start(code) {
       h('span', { class: 'q', text: 'AI가 알려 준 답, 그대로 믿고 난제를 풀 수 있을까?' }),
       h('span', { class: 'sp' }),
       tabs,
-      h('div', { class: 'joinbox' }, [qrBox, h('div', null, [h('div', { class: 'code', text: room.room }), h('div', { class: 'url', text: studentUrl })])]),
+      h('div', { class: 'joinbox' }, [qrNode(), h('div', null, [h('div', { class: 'code', text: room.room }), h('div', { class: 'url', text: studentUrl }), h('div', { class: 'muted', text: 'QR을 누르면 크게 보여요' })])]),
       h('span', { class: 'b-meta', text: updated ? '갱신 ' + new Date(updated).toLocaleTimeString('ko-KR') : '연결 중…' })
     ]);
     const grid = h('div', { class: 'b-grid' }, TOPICS.map((t, i) => column(i + 1, false)));
@@ -142,9 +150,23 @@ async function start(code) {
       const ov = h('div', { class: 'ov', onclick: (e) => { if (e.target === ov) { focus = 0; render(); } } }, [column(focus, true)]);
       root.appendChild(ov);
     }
+    if (bigQr) {
+      const img = qrImg(12);
+      root.appendChild(h('div', { class: 'ov qr-ov', onclick: () => { bigQr = false; render(); } }, [
+        h('div', { class: 'qr-big' }, [
+          img,
+          h('div', { class: 'code', text: '수업 코드 ' + room.room }),
+          h('div', { class: 'url', text: studentUrl }),
+          h('div', { class: 'muted', text: '아무 곳이나 누르면 닫혀요' })
+        ])
+      ]));
+    }
   }
 
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && focus) { focus = 0; render(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
+  });
   room.subscribe((rows) => { data = summarize(rows); updated = Date.now(); render(); },
     (err) => toast('연결이 끊겼어요: ' + err.message));
   render();

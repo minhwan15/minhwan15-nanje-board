@@ -90,8 +90,13 @@ textarea { min-height: 70px; resize: vertical; }
 .ov .col { width: min(1100px, 100%); max-height: 100%; cursor: zoom-out; }
 .ov .col-b { font-size: 26px; } .ov .lbl { font-size: 18px; } .ov .col-h .t { font-size: 34px; }
 .joinbox { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px 12px 6px 6px; }
-.joinbox .qr { width: 72px; height: 72px; background: #fff; border-radius: 8px; }
-.joinbox .qr img, .joinbox .qr canvas { width: 72px; height: 72px; display: block; }
+.joinbox .qr { width: 120px; height: 120px; background: #fff; border: 0; border-radius: 8px; padding: 0; cursor: zoom-in; }
+.joinbox .qr img { width: 120px; height: 120px; display: block; image-rendering: pixelated; }
+.qr-ov { cursor: zoom-out; }
+.qr-big { background: #fff; border-radius: 24px; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 92vw; }
+.qr-big img { width: min(70vh, 80vw); height: min(70vh, 80vw); image-rendering: pixelated; display: block; }
+.qr-big .code { font-size: 32px; font-weight: 900; color: var(--navy); }
+.qr-big .url { font-size: 18px; color: var(--soft); overflow-wrap: anywhere; text-align: center; }
 .joinbox .code { font-size: 22px; font-weight: 900; color: var(--navy); }
 .joinbox .url { font-size: 13px; color: var(--soft); max-width: 260px; overflow-wrap: anywhere; }
 .setup { max-width: 560px; margin: 12vh auto; padding: 0 16px; display: flex; flex-direction: column; gap: 14px; }
