@@ -1,7 +1,7 @@
 // 데이터 저장소: Firebase Firestore(실시간) 또는 설정 전 데모 모드(이 브라우저 안에서만)
 import { firebaseConfig } from './config.js';
 
-export const STAGE_KEYS = ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment', 'free'];
+export const STAGE_KEYS = ['map', 'compare', 'signal', 'v1', 'rebut', 'v2', 'comment', 'free', 'p1', 'p2', 'p3', 'p4'];
 export const isDemo = String(firebaseConfig.apiKey || '').startsWith('YOUR_');
 
 function cleanRoom(room) {
@@ -20,8 +20,17 @@ async function firestoreStore(room) {
   const app = initializeApp(firebaseConfig);
   const db = fs.getFirestore(app);
   const col = fs.collection(db, 'rooms', room, 'posts');
+  const meta = fs.doc(db, 'rooms', room);
   return {
     room,
+    // 이 수업 코드가 어떤 활동인지(처음 교실 화면을 연 때 정해짐). 기록이 없으면 null
+    async getAct() {
+      const snap = await fs.getDoc(meta);
+      return snap.exists() ? snap.data().act : null;
+    },
+    async setAct(act) {
+      await fs.setDoc(meta, { act, createdAt: fs.serverTimestamp() });
+    },
     async submit(group, stage, data) {
       if (STAGE_KEYS.indexOf(stage) < 0) throw new Error('단계를 확인하세요.');
       await fs.addDoc(col, { group: Number(group), stage, data, createdAt: fs.serverTimestamp() });
@@ -49,8 +58,11 @@ function demoStore(room) {
   const emit = () => listeners.forEach((cb) => cb(read()));
   if (chan) chan.onmessage = emit;
   window.addEventListener('storage', (e) => { if (e.key === key) emit(); });
+  const metaKey = 'nanje-demo-meta-' + room;
   return {
     room,
+    async getAct() { try { return localStorage.getItem(metaKey); } catch (e) { return null; } },
+    async setAct(act) { try { localStorage.setItem(metaKey, act); } catch (e) { /* 무시 */ } },
     async submit(group, stage, data) {
       const rows = read();
       rows.push({ t: Date.now(), g: Number(group), s: stage, d: data });

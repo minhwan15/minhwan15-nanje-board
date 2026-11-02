@@ -1,6 +1,7 @@
-import { TOPICS } from './config.js';
 import { openRoom, summarize, isDemo } from './store.js';
 import { STAGES, h, toast, store, param, demoBanner } from './ui.js';
+import { ACTIVITIES, ACT_IDS, getAct } from './activities.js';
+import * as G from './generic.js';
 
 const root = document.getElementById('app');
 const roomCode = param('room');
@@ -9,17 +10,38 @@ if (!roomCode) showSetup(); else start(roomCode);
 
 function showSetup() {
   const d = new Date();
-  const suggest = '6반-' + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-  const input = h('input', { type: 'text', id: 'room', value: suggest, 'aria-label': '수업 코드' });
+  const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const SUFFIX = { nanje: '', future: '미래-', uam: '융합-' };
+  let pick = ACT_IDS.indexOf(store('nb_setup_act')) >= 0 ? store('nb_setup_act') : 'nanje';
+  const input = h('input', { type: 'text', id: 'room', 'aria-label': '수업 코드' });
+  const suggest = () => { input.value = '6반-' + SUFFIX[pick] + mmdd; };
+  suggest();
+  const cards = h('div', { class: 'act-cards', role: 'radiogroup', 'aria-label': '수업 활동' });
+  function drawCards() {
+    cards.replaceChildren(...ACT_IDS.map((id) => {
+      const a = ACTIVITIES[id];
+      return h('button', { type: 'button', role: 'radio', class: 'act-card', 'aria-checked': String(pick === id),
+        onclick: () => { pick = id; store('nb_setup_act', id); suggest(); drawCards(); } }, [
+        h('span', { class: 'act-tag', text: id === 'nanje' ? '본 차시' : '이전 차시 연습' }),
+        h('b', { text: a.title }),
+        h('span', { class: 'muted', text: a.unit }),
+        h('span', { class: 'act-q', text: a.question })
+      ]);
+    }));
+  }
+  drawCards();
   const go = () => {
     const v = input.value.trim();
     if (!v) { toast('수업 코드를 입력하세요'); return; }
-    location.search = '?room=' + encodeURIComponent(v);
+    location.search = '?room=' + encodeURIComponent(v) + '&act=' + pick;
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-  root.replaceChildren(h('main', { class: 'setup' }, [
-    h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구 · 난제 해결 라이브 보드' }), '교실 화면 열기']),
-    h('p', { class: 'muted', text: '수업마다 새 코드를 쓰면 빈 보드에서 시작합니다. 반과 날짜를 넣어 두면 나중에 기록을 다시 볼 수 있어요. (예: 6반-1106, 8반-1106, 리허설)' }),
+  root.replaceChildren(h('main', { class: 'setup wide' }, [
+    h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구 · 모둠 라이브 보드' }), '교실 화면 열기']),
+    h('div', { class: 'lbl', text: '① 오늘 할 활동' }),
+    cards,
+    h('div', { class: 'lbl', text: '② 수업 코드' }),
+    h('p', { class: 'muted', text: '수업마다 새 코드를 쓰면 빈 보드에서 시작합니다. 코드는 처음 연 활동으로 고정되니, 활동이 다르면 코드도 다르게 써 주세요.' }),
     h('div', { class: 'join' }, [input, h('button', { type: 'button', text: '보드 열기', onclick: go })]),
     isDemo ? demoBanner() : null
   ]));
@@ -31,14 +53,41 @@ async function start(code) {
     root.replaceChildren(h('div', { class: 'setup' }, [h('div', { class: 'err', text: '연결하지 못했어요: ' + e.message })]));
     return;
   }
+  // 이 수업 코드의 활동: 이미 정해져 있으면 그대로, 처음이면 고른 활동으로 기록
+  let actId = null;
+  try { actId = await room.getAct(); } catch (e) { actId = null; }
+  const wanted = ACT_IDS.indexOf(param('act')) >= 0 ? param('act') : 'nanje';
+  if (!actId) {
+    try { await room.setAct(wanted); actId = wanted; } catch (e) {
+      if (wanted !== 'nanje') {
+        root.replaceChildren(h('div', { class: 'setup' }, [h('div', { class: 'err', text: '연습 활동을 기록하지 못했어요. Firebase 콘솔 Firestore → 규칙 탭에 새 규칙(firestore.rules)을 다시 게시해 주세요. (' + e.message + ')' })]));
+        return;
+      }
+      actId = 'nanje';
+    }
+  } else if (param('act') && param('act') !== actId) {
+    setTimeout(() => toast('이 코드는 이미 「' + getAct(actId).title + '」 활동으로 만들어진 코드예요.'), 300);
+  }
+  const act = getAct(actId);
+  const nanje = act.engine === 'nanje';
+  const TOPICS = act.topics;
+  const STAGES_ = nanje ? STAGES : act.stages;
+  const lastStage = STAGES_[STAGES_.length - 1];
+  const finalKey = nanje ? 'v2' : lastStage.key;
+  const genStage = (k) => (nanje ? null : act.stages.find((x) => x.key === k));
+
   let data = { latest: {}, comments: [], free: [] };
   let rows = [];
   let bigImg = null; // { src, cap }
   let updated = 0;
-  let view = store('nb_view') || 'all';
+  const viewKey = 'nb_view_' + act.id;
   let focus = 0;
   const seen = {};
-  const VIEWS = [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']];
+  const VIEWS = nanje
+    ? [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']]
+    : [['all', '전체 진행']].concat(act.stages.map((x) => [x.key, x.short]), [['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']]);
+  let view = store(viewKey);
+  if (!VIEWS.some((v) => v[0] === view)) view = 'all';
   const studentUrl = location.origin + location.pathname.replace(/board(\.html)?$/, '') + '?room=' + encodeURIComponent(room.room);
 
   // QR: 보드 위에는 중간 크기, 누르면 화면 가득 크게
@@ -65,7 +114,7 @@ async function start(code) {
   function stageOf(g) {
     const l = data.latest[g] || {};
     let last = null;
-    STAGES.forEach((s) => { if (l[s.key] && (!last || l[s.key].t >= l[last].t)) last = s.key; });
+    STAGES_.forEach((s) => { if (l[s.key] && (!last || l[s.key].t >= l[last].t)) last = s.key; });
     return last;
   }
 
@@ -98,6 +147,12 @@ async function start(code) {
     const out = [];
     const v = view === 'all' ? stageOf(g) : view;
     if (!v) return [h('div', { class: 'empty', text: '아직 올린 내용이 없어요' })];
+    if (genStage(v)) {
+      const d = l[v] && l[v].d;
+      if (!d) return [h('div', { class: 'empty', text: genStage(v).short + ' 대기 중' })];
+      if (view === 'all') out.push(h('div', { class: 'lbl stage-t', text: genStage(v).label }));
+      return out.concat(G.boardBody(genStage(v), d, pic).filter(Boolean));
+    }
     if (v === 'map') {
       const d = l.map && l.map.d;
       if (!d) return [h('div', { class: 'empty', text: '마인드맵 대기 중' })];
@@ -159,21 +214,16 @@ async function start(code) {
     return h('section', { class: 'col' + (fresh ? ' fresh' : ''), tabindex: '0', 'aria-label': g + '모둠', onclick: toggle,
       onkeydown: (e) => { if (e.key === 'Enter') toggle(); } }, [
       h('header', { class: 'col-h' }, [
-        h('div', { class: 'n' }, [g + '모둠' + (cur ? ' · 지금 ' + STAGES.find((s) => s.key === cur).short : ''), ago(latestT, !!l.v2)]),
+        h('div', { class: 'n' }, [g + '모둠' + (cur ? ' · 지금 ' + STAGES_.find((s) => s.key === cur).short : ''), ago(latestT, !!l[finalKey])]),
         h('div', { class: 't', text: TOPICS[g - 1] }),
-        h('div', { class: 'dots', 'aria-hidden': 'true' }, STAGES.map((s) => h('span', { class: 'dot' + (l[s.key] ? (s.key === cur ? ' now' : ' on') : '') })))
+        h('div', { class: 'dots', 'aria-hidden': 'true' }, STAGES_.map((s) => h('span', { class: 'dot' + (l[s.key] ? (s.key === cur ? ' now' : ' on') : '') })))
       ]),
       h('div', { class: 'col-b' }, content(g))
     ]);
   }
 
-  // 반 전체 정리: AI 주장 신호등 집계 + 모둠별 v1 → v2
-  function summaryView() {
-    const all = [];
-    TOPICS.forEach((t, i) => {
-      const sg = data.latest[i + 1] && data.latest[i + 1].signal;
-      ((sg && sg.d.rows) || []).forEach((r) => { if (r.claim && r.light) all.push({ g: i + 1, ...r }); });
-    });
+  // 신호등 집계 카드
+  function tallyCard(all, noun) {
     const n = { G: 0, Y: 0, R: 0 };
     all.forEach((r) => { n[r.light] = (n[r.light] || 0) + 1; });
     const total = all.length;
@@ -182,13 +232,47 @@ async function start(code) {
       ['G', 'Y', 'R'].map((k) => (n[k] ? h('div', { class: 'seg ' + k, style: 'flex:' + n[k], text: String(n[k]) }) : null)));
     const legend = h('div', { class: 'sum-legend' }, ['G', 'Y', 'R'].map((k) => h('span', null, [h('i', { class: k }), ({ G: '초록 확인됨 ', Y: '노랑 확인 못 함 ', R: '빨강 틀림·출처 없음 ' })[k] + n[k] + '개 (' + pct(k) + '%)'])));
     const reds = all.filter((r) => r.light !== 'G');
-    const left = h('section', { class: 'sum-card' }, [
-      h('h2', { text: 'AI 주장 ' + total + '개 중, 그대로 믿을 수 있었던 것은 ' + n.G + '개' }),
+    return h('section', { class: 'sum-card' }, [
+      h('h2', { text: noun + ' ' + total + '개 중, 자료로 확인된 것은 ' + n.G + '개' }),
       total ? h('div', null, [bar, legend]) : h('div', { class: 'empty', text: '아직 신호등 판정이 없어요' }),
-      reds.length ? h('div', { class: 'lbl', text: '확인되지 않은 AI 주장' }) : null,
+      reds.length ? h('div', { class: 'lbl', text: '확인되지 않은 내용' }) : null,
       h('div', { class: 'sum-list' }, reds.map((r) => h('div', { class: 'sig' }, [h('i', { class: r.light }),
         h('div', null, [h('div', { class: 'box', text: r.claim }), h('div', { class: 'muted', text: r.g + '모둠' + (r.source ? ' · ' + r.source : '') })])])))
     ]);
+  }
+
+  // 반 전체 정리
+  function summaryView() {
+    const all = [];
+    if (nanje) {
+      TOPICS.forEach((t, i) => {
+        const sg = data.latest[i + 1] && data.latest[i + 1].signal;
+        ((sg && sg.d.rows) || []).forEach((r) => { if (r.claim && r.light) all.push({ g: i + 1, ...r }); });
+      });
+    } else {
+      TOPICS.forEach((t, i) => act.stages.forEach((st) => {
+        const p = data.latest[i + 1] && data.latest[i + 1][st.key];
+        if (p) G.lightRows(st, p.d).forEach((r) => all.push({ g: i + 1, ...r }));
+      }));
+    }
+    const left = tallyCard(all, nanje ? 'AI 주장' : '조사한 내용');
+    if (!nanje) {
+      const right = h('section', { class: 'sum-card' }, [
+        h('h2', { text: '모둠별 「' + lastStage.short + '」' }),
+        h('div', { class: 'sum-list' }, TOPICS.map((t, i) => {
+          const p = data.latest[i + 1] && data.latest[i + 1][finalKey];
+          const d = p && p.d;
+          return h('div', { class: 'sum-row' }, [
+            h('div', { class: 'sum-g' }, [h('b', { text: (i + 1) + '모둠' }), h('span', { text: t })]),
+            d ? h('div', { class: 'sum-final' + (d.img ? '' : ' noimg') }, [
+              d.img ? pic(d.img, (i + 1) + '모둠 ' + lastStage.short) : null,
+              h('div', null, G.boardBody(lastStage, Object.assign({}, d, { img: '' }), pic).filter(Boolean))
+            ]) : h('div', { class: 'muted', text: '대기 중' })
+          ]);
+        }))
+      ]);
+      return h('div', { class: 'sum-grid' }, [left, right]);
+    }
     const right = h('section', { class: 'sum-card' }, [
       h('h2', { text: 'AI 반론을 거쳐 해결책은 어떻게 바뀌었나' }),
       h('div', { class: 'sum-list' }, TOPICS.map((t, i) => {
@@ -223,10 +307,12 @@ async function start(code) {
       return (K[k] || k) + ': ' + (Array.isArray(v) ? v.join('·') : v);
     }).filter((x) => !/: $/.test(x)).join(' | ') + (d.img ? ' | [사진·그림 첨부]' : '');
     const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
-    const lines = [['시각', '모둠', '주제', '단계', '내용']].concat(rows.map((r) => [
-      new Date(r.t).toLocaleString('ko-KR'), r.g + '모둠', TOPICS[r.g - 1] || '', LBL[r.s] || r.s, flat(r.d || {})]));
+    if (!nanje) act.stages.forEach((x) => { LBL[x.key] = x.label; });
+    const text = (r) => (genStage(r.s) ? G.flatText(genStage(r.s), r.d || {}) + (r.d && r.d.img ? ' | [사진·그림 첨부]' : '') : flat(r.d || {}));
+    const lines = [['시각', '모둠', act.topicLabel || '주제', '단계', '내용']].concat(rows.map((r) => [
+      new Date(r.t).toLocaleString('ko-KR'), r.g + '모둠', TOPICS[r.g - 1] || '', LBL[r.s] || r.s, text(r)]));
     const blob = new Blob(['\ufeff' + lines.map((l) => l.map(esc).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: '난제보드_' + room.room + '.csv' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: act.title.replace(/\s+/g, '') + '_' + room.room + '.csv' });
     document.body.appendChild(a); a.click(); a.remove();
   }
 
@@ -290,10 +376,10 @@ async function start(code) {
 
   function render() {
     const tabs = h('div', { class: 'b-tabs', role: 'tablist' }, VIEWS.map((v) =>
-      h('button', { type: 'button', role: 'tab', 'aria-selected': String(view === v[0]), text: v[1], onclick: () => { view = v[0]; store('nb_view', view); render(); } })));
+      h('button', { type: 'button', role: 'tab', 'aria-selected': String(view === v[0]), text: v[1], onclick: () => { view = v[0]; store(viewKey, view); render(); } })));
     const top = h('header', { class: 'b-top' }, [
-      h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '난제 해결 라이브 보드']),
-      h('span', { class: 'q', text: 'AI가 알려 준 답, 그대로 믿고 난제를 풀 수 있을까?' }),
+      h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구 · ' + act.unit }), act.title]),
+      h('span', { class: 'q', text: act.question }),
       h('span', { class: 'sp' }),
       tabs,
       h('div', { class: 'joinbox' }, [qrNode(), h('div', null, [h('div', { class: 'code', text: room.room }), h('div', { class: 'url', text: studentUrl }), h('div', { class: 'muted', text: 'QR을 누르면 크게 보여요' })])]),
@@ -324,12 +410,6 @@ async function start(code) {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (bigImg) {
-      root.appendChild(h('div', { class: 'ov img-ov', onclick: () => { bigImg = null; render(); } }, [
-        h('figure', { class: 'img-big' }, [h('img', { src: bigImg.src, alt: bigImg.cap || '크게 본 그림' }),
-          bigImg.cap ? h('figcaption', { text: bigImg.cap }) : null])
-      ]));
-    }
     if (bigImg) { bigImg = null; zoom = 1; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
   });
   room.subscribe((r) => { rows = r; data = summarize(r); updated = Date.now(); render(); },

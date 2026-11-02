@@ -154,3 +154,18 @@ textarea { min-height: 70px; resize: vertical; }
 .iv-stage img { display: block; background: #fff; max-width: none; }
 .iv-stage.zoomed img { margin: auto; }
 .kicker { display: block; font-size: .5em; font-weight: 700; color: var(--teal); letter-spacing: .02em; margin-bottom: 2px; }
+
+/* 활동 고르기 */
+.setup.wide { max-width: 980px; margin-top: 6vh; }
+.act-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.act-card { text-align: left; border: 2px solid var(--line); background: var(--panel); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
+.act-card b { font-size: 19px; color: var(--navy); }
+.act-card .muted { font-size: 13px; }
+.act-card .act-q { font-size: 14px; color: var(--orange); font-weight: 700; }
+.act-card .act-tag { align-self: flex-start; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; background: #E9EFEA; color: var(--teal); }
+.act-card[aria-checked="true"] { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(44,122,123,.2); background: #F1F8F7; }
+@media (max-width: 760px) { .act-cards { grid-template-columns: 1fr; } }
+.stage-t { color: var(--orange); }
+.sum-final { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; align-items: start; }
+.sum-final .pic img { max-height: 180px; }
+.sum-final.noimg { grid-template-columns: 1fr; }

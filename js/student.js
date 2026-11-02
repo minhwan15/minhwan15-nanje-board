@@ -1,4 +1,6 @@
-import { TOPICS, SCIENCE_HINTS } from './config.js';
+import { SCIENCE_HINTS } from './config.js';
+import { getAct } from './activities.js';
+import * as G from './generic.js';
 import { openRoom, summarize, isDemo } from './store.js';
 import { STAGES, FIELDS_OF_STUDY, h, toast, store, param, demoBanner } from './ui.js';
 import { attachWidget } from './media.js';
@@ -17,7 +19,7 @@ function showJoin() {
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   root.replaceChildren(h('main', { class: 'setup' }, [
-    h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '난제 해결 라이브 보드']),
+    h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '모둠 라이브 보드']),
     h('p', { class: 'muted', text: '칠판에 적힌 수업 코드를 입력하거나 화면의 QR 코드를 찍어 주세요.' }),
     h('div', { class: 'join' }, [input, h('button', { type: 'button', text: '들어가기', onclick: go })]),
     isDemo ? demoBanner() : null
@@ -30,9 +32,22 @@ async function start(code) {
     root.replaceChildren(h('main', { class: 's-wrap' }, [h('div', { class: 'err', text: '연결하지 못했어요: ' + e.message })]));
     return;
   }
+  let actId = null;
+  try { actId = await room.getAct(); } catch (e) { actId = null; }
+  const act = getAct(actId);
+  const nanje = act.engine === 'nanje';
+  const TOPICS = act.topics;
+  const STAGES_ = nanje ? STAGES : act.stages;
+  const lastStage = STAGES_[STAGES_.length - 1];
+  const finalKey = nanje ? 'v2' : lastStage.key;
+  const finalText = (d) => (nanje ? d.solution : d[lastStage.final]) || '';
+  const genStage = () => (nanje ? null : act.stages.find((x) => x.key === tab));
   const keyG = 'nb_group_' + room.room;
   let group = Number(store(keyG)) || 0;
-  let tab = store('nb_tab') || 'map';
+  const tabKey = 'nb_tab_' + act.id;
+  const TABS = STAGES_.concat([{ key: 'comment', label: '댓글 평가' }, { key: 'free', label: '자유 게시(사진·그림)' }]);
+  let tab = store(tabKey);
+  if (!TABS.some((t) => t.key === tab)) tab = STAGES_[0].key;
   let summary = { latest: {}, comments: [], free: [] };
   let att = null; // 현재 폼의 사진·그림 첨부
 
@@ -44,9 +59,9 @@ async function start(code) {
   const prevData = () => (mine()[tab] && mine()[tab].d) || {};
 
   function renderHead() {
-    const tabs = STAGES.concat([{ key: 'comment', label: '댓글 평가' }, { key: 'free', label: '자유 게시(사진·그림)' }]);
+    const tabs = TABS;
     headBox.replaceChildren(h('header', { class: 's-head' }, [
-      h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구' }), '난제 해결 라이브 보드']),
+      h('h1', null, [h('small', { class: 'kicker', text: '융합과학 탐구 · ' + act.unit }), act.title]),
       h('div', { class: 'room', text: '수업 코드 ' + room.room }),
       h('div', { class: 'muted', text: '우리 모둠을 고르고, 단계가 끝날 때마다 올리면 앞 화면에 바로 떠요.' }),
       h('div', { class: 'groups', role: 'group', 'aria-label': '모둠 선택' }, TOPICS.map((t, i) =>
@@ -54,7 +69,7 @@ async function start(code) {
           [h('b', { text: (i + 1) + '모둠' }), h('span', { text: t })]))),
       group ? h('nav', { class: 'tabs', role: 'tablist' }, tabs.map((s) =>
         h('button', { type: 'button', role: 'tab', 'aria-selected': String(tab === s.key), class: (mine()[s.key] || (s.key === 'free' && summary.free.some((f) => f.g === group))) ? 'done' : '', text: s.label,
-          onclick: () => { tab = s.key; store('nb_tab', tab); renderAll(); } }))) : null
+          onclick: () => { tab = s.key; store(tabKey, tab); renderAll(); } }))) : null
     ]));
   }
 
@@ -75,6 +90,7 @@ async function start(code) {
   function fields() {
     const topic = TOPICS[group - 1] || '';
     const d = prevData();
+    if (genStage()) return G.formFields(genStage(), d, (act.topicLabel ? act.topicLabel + ': ' : '') + topic);
     if (tab === 'map') return [
       h('h2', { text: '① 원인 마인드맵' }),
       h('div', { class: 'hint' }, [h('b', { text: topic + ' 과학 개념 힌트  ' }), SCIENCE_HINTS[topic] || '']),
@@ -132,17 +148,17 @@ async function start(code) {
       area('changed', 'v1에서 무엇이 바뀌었나?', { req: true })
     ];
     if (tab === 'comment') {
-      const others = Object.keys(summary.latest).filter((k) => Number(k) !== group && summary.latest[k].v2);
+      const others = Object.keys(summary.latest).filter((k) => Number(k) !== group && summary.latest[k][finalKey]);
       const received = summary.comments.filter((c) => Number(c.d.to) === group);
       return [
         h('h2', { text: '댓글 평가' }),
-        h('div', { class: 'hint', text: '다른 모둠 v2에 좋은 변화 하나, 궁금한 점 하나를 남겨요.' }),
+        h('div', { class: 'hint', text: nanje ? '다른 모둠 v2에 좋은 변화 하나, 궁금한 점 하나를 남겨요.' : '다른 모둠의 「' + lastStage.short + '」 결과에 좋은 점 하나, 궁금한 점 하나를 남겨요.' }),
         others.length ? h('div', { class: 'f' }, others.map((k) =>
-          h('div', { class: 'recv' }, [h('b', { text: k + '모둠 · ' + (TOPICS[k - 1] || '') + '  ' }), summary.latest[k].v2.d.solution || '']))) :
-          h('div', { class: 'muted', text: '아직 v2를 올린 모둠이 없어요.' }),
+          h('div', { class: 'recv' }, [h('b', { text: k + '모둠 · ' + (TOPICS[k - 1] || '') + '  ' }), finalText(summary.latest[k][finalKey].d)]))) :
+          h('div', { class: 'muted', text: nanje ? '아직 v2를 올린 모둠이 없어요.' : '아직 「' + lastStage.short + '」을 올린 모둠이 없어요.' }),
         h('label', { class: 'f' }, ['댓글 받을 모둠', h('select', { 'data-k': 'to' },
           TOPICS.map((t, i) => (i + 1 === group ? null : h('option', { value: String(i + 1), text: (i + 1) + '모둠 · ' + t }))))]),
-        area('good', '좋은 변화 하나'), area('question', '궁금한 점 하나'),
+        area('good', nanje ? '좋은 변화 하나' : '좋은 점 하나'), area('question', '궁금한 점 하나'),
         received.length ? h('div', { class: 'f' }, [h('b', { text: '우리 모둠이 받은 댓글' })].concat(received.map((c) =>
           h('div', { class: 'recv' }, [h('b', { text: c.g + '모둠: ' }), '좋은 점 ' + (c.d.good || '-') + ' · 궁금한 점 ' + (c.d.question || '-')])))) : null
       ];
@@ -170,6 +186,7 @@ async function start(code) {
     return d;
   }
   function collectFields(box) {
+    if (genStage()) return G.collectFields(genStage(), box);
     if (tab === 'signal' || tab === 'rebut') {
       return { rows: Array.from(box.querySelectorAll('[data-row]')).map((row) => {
         const o = {};
@@ -188,6 +205,10 @@ async function start(code) {
   }
 
   function validate(d) {
+    if (genStage()) {
+      const m = G.validateFields(genStage(), d);
+      if (m) return m;
+    }
     if (tab === 'map' && !d.science) return '핵심 과학 원리를 꼭 적어 주세요.';
     if (tab === 'v1') {
       if (!d.solution || !d.principle) return '해결책과 작동 원리를 모두 적어 주세요.';
