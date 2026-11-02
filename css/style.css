@@ -157,7 +157,7 @@ textarea { min-height: 70px; resize: vertical; }
 
 /* 활동 고르기 */
 .setup.wide { max-width: 980px; margin-top: 6vh; }
-.act-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.act-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .act-card { text-align: left; border: 2px solid var(--line); background: var(--panel); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
 .act-card b { font-size: 19px; color: var(--navy); }
 .act-card .muted { font-size: 13px; }

@@ -1,6 +1,6 @@
 import { openRoom, summarize, isDemo } from './store.js';
 import { STAGES, h, toast, store, param, demoBanner } from './ui.js';
-import { ACTIVITIES, ACT_IDS, getAct } from './activities.js';
+import { ACTIVITIES, ACT_IDS, LISTED, ACT_TAG, getAct } from './activities.js';
 import * as G from './generic.js';
 
 const root = document.getElementById('app');
@@ -12,17 +12,17 @@ function showSetup() {
   const d = new Date();
   const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
   const SUFFIX = { nanje: '', future: '미래-', uam: '융합-' };
-  let pick = ACT_IDS.indexOf(store('nb_setup_act')) >= 0 ? store('nb_setup_act') : 'nanje';
+  let pick = LISTED.indexOf(store('nb_setup_act')) >= 0 ? store('nb_setup_act') : LISTED[0];
   const input = h('input', { type: 'text', id: 'room', 'aria-label': '수업 코드' });
   const suggest = () => { input.value = '6반-' + SUFFIX[pick] + mmdd; };
   suggest();
   const cards = h('div', { class: 'act-cards', role: 'radiogroup', 'aria-label': '수업 활동' });
   function drawCards() {
-    cards.replaceChildren(...ACT_IDS.map((id) => {
+    cards.replaceChildren(...LISTED.map((id) => {
       const a = ACTIVITIES[id];
       return h('button', { type: 'button', role: 'radio', class: 'act-card', 'aria-checked': String(pick === id),
         onclick: () => { pick = id; store('nb_setup_act', id); suggest(); drawCards(); } }, [
-        h('span', { class: 'act-tag', text: id === 'nanje' ? '본 차시' : '이전 차시 연습' }),
+        h('span', { class: 'act-tag', text: ACT_TAG[id] }),
         h('b', { text: a.title }),
         h('span', { class: 'muted', text: a.unit }),
         h('span', { class: 'act-q', text: a.question })

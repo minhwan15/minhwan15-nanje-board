@@ -119,4 +119,7 @@ export const ACTIVITIES = {
 };
 
 export const ACT_IDS = Object.keys(ACTIVITIES);
+// 교실 화면에서 고를 수 있는 활동 (차시 순서). uam은 예전 코드 호환용으로만 남김
+export const LISTED = ['future', 'nanje'];
+export const ACT_TAG = { future: 'Ⅲ-01 차시', nanje: 'Ⅲ-02 차시', uam: 'Ⅲ-01 추가' };
 export const getAct = (id) => ACTIVITIES[id] || ACTIVITIES.nanje;
