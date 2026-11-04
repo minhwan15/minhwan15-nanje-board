@@ -167,6 +167,58 @@ async function start(code) {
       ]);
     });
   }
+  // ---------- 발표 모드: 한 모둠 결과를 단계별로 화면 가득 ----------
+  let pres = null; // { g, i }
+  let timerEnd = 0, timerLeft = 60;
+  const PRES_LABEL = { map: '① 원인 마인드맵', compare: '② AI 마인드맵과 비교', signal: '③ AI 주장 신호등', solution: '④~⑥ 해결책 v1 → v2', free: '자유 게시 (사진·그림)', comment: '받은 댓글' };
+  function presSteps(g) {
+    const l = data.latest[g] || {};
+    const steps = nanje
+      ? ['map', 'compare', 'signal', 'solution'].filter((k) => (k === 'solution' ? (l.v1 || l.rebut || l.v2) : l[k]))
+      : act.stages.filter((s) => l[s.key]).map((s) => s.key);
+    if (freeOf(g).length) steps.push('free');
+    if (data.comments.some((c) => Number(c.d.to) === g)) steps.push('comment');
+    return steps;
+  }
+  const stepLabel = (k) => (genStage(k) ? genStage(k).label : PRES_LABEL[k] || k);
+  function presGo(g, i) {
+    const steps = presSteps(g);
+    pres = { g, i: Math.max(0, Math.min(i, Math.max(0, steps.length - 1))) };
+    render();
+  }
+  function timerText() {
+    const left = timerEnd ? Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000)) : timerLeft;
+    return Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+  }
+  function presView() {
+    const g = pres.g, steps = presSteps(g), k = steps[pres.i];
+    const timerBtn = h('button', { type: 'button', class: 'pres-timer' + (timerEnd ? ' run' : ''), title: '누르면 1분 타이머 시작/정지',
+      onclick: () => { if (timerEnd) { timerLeft = Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000)); timerEnd = 0; } else { if (timerLeft <= 0) timerLeft = 60; timerEnd = Date.now() + timerLeft * 1000; } render(); } }, [timerText()]);
+    return h('div', { class: 'pres', role: 'dialog', 'aria-label': g + '모둠 발표' }, [
+      h('header', { class: 'pres-h' }, [
+        h('div', { class: 'pres-g' }, TOPICS.map((t, i) => h('button', { type: 'button', 'aria-pressed': String(g === i + 1), text: (i + 1) + '모둠', onclick: () => presGo(i + 1, 0) }))),
+        h('span', { class: 'sp' }),
+        timerBtn,
+        h('button', { type: 'button', class: 'pres-x', text: '1:00', title: '타이머 다시 1분으로', onclick: () => { timerEnd = 0; timerLeft = 60; render(); } }),
+        h('button', { type: 'button', class: 'pres-x', text: '닫기 ✕', onclick: () => { pres = null; render(); } })
+      ]),
+      h('div', { class: 'pres-title' }, [h('span', { class: 'pres-n', text: g + '모둠 발표' }), h('b', { text: TOPICS[g - 1] })]),
+      h('nav', { class: 'pres-steps' }, steps.map((s, i) => h('button', { type: 'button', 'aria-current': String(i === pres.i), text: stepLabel(s), onclick: () => presGo(g, i) }))),
+      h('main', { class: 'pres-b' }, k ? body(g, null, k).filter(Boolean) : [h('div', { class: 'empty', text: '아직 올린 내용이 없어요' })]),
+      h('footer', { class: 'pres-f' }, [
+        h('button', { type: 'button', text: '◀ 이전', disabled: pres.i <= 0, onclick: () => presGo(g, pres.i - 1) }),
+        h('span', { text: steps.length ? (pres.i + 1) + ' / ' + steps.length : '' }),
+        h('button', { type: 'button', text: '다음 ▶', disabled: pres.i >= steps.length - 1, onclick: () => presGo(g, pres.i + 1) })
+      ])
+    ]);
+  }
+  setInterval(() => {
+    if (!pres || !timerEnd) return;
+    const el = document.querySelector('.pres-timer');
+    if (el) { el.textContent = timerText(); el.classList.toggle('warn', timerEnd - Date.now() <= 10000); }
+    if (Date.now() >= timerEnd) { timerEnd = 0; timerLeft = 0; render(); }
+  }, 250);
+
   function typingCount(g) { return drafts.filter((x) => x.g === g && Date.now() - x.t < 30000).length; }
 
   function content(g) {
@@ -424,7 +476,10 @@ async function start(code) {
       h('div', { class: 'joinbox' }, [qrNode(), h('div', null, [h('div', { class: 'code', text: room.room }), h('div', { class: 'url', text: studentUrl }), h('div', { class: 'muted', text: 'QR을 누르면 크게 보여요' })])]),
       h('div', { class: 'b-side' }, [
         h('span', { class: 'b-meta', text: updated ? '갱신 ' + new Date(updated).toLocaleTimeString('ko-KR') : '연결 중…' }),
-        h('button', { type: 'button', class: 'btn-ghost', text: '기록 저장(엑셀)', onclick: exportCsv })
+        h('div', { class: 'b-btns' }, [
+          h('button', { type: 'button', class: 'btn', text: '발표 모드', onclick: () => presGo(focus || 1, 0) }),
+          h('button', { type: 'button', class: 'btn-ghost', text: '기록 저장(엑셀)', onclick: exportCsv })
+        ])
       ])
     ]);
     const grid = view === 'summary' ? summaryView() : h('div', { class: 'b-grid' }, TOPICS.map((t, i) => column(i + 1, false)));
@@ -433,6 +488,7 @@ async function start(code) {
       const ov = h('div', { class: 'ov', onclick: (e) => { if (e.target === ov) { focus = 0; render(); } } }, [column(focus, true)]);
       root.appendChild(ov);
     }
+    if (pres) { focus = 0; root.appendChild(presView()); }
     if (bigImg) root.appendChild(viewer(bigImg));
     if (bigQr) {
       const img = qrImg(12);
@@ -448,6 +504,13 @@ async function start(code) {
   }
 
   document.addEventListener('keydown', (e) => {
+    if (pres && !bigImg) {
+      const n = presSteps(pres.g).length;
+      if (['ArrowRight', 'PageDown', ' '].indexOf(e.key) >= 0) { e.preventDefault(); if (pres.i < n - 1) presGo(pres.g, pres.i + 1); return; }
+      if (['ArrowLeft', 'PageUp'].indexOf(e.key) >= 0) { e.preventDefault(); if (pres.i > 0) presGo(pres.g, pres.i - 1); return; }
+      if (/^[1-5]$/.test(e.key) && Number(e.key) <= TOPICS.length) { presGo(Number(e.key), 0); return; }
+      if (e.key === 'Escape') { pres = null; render(); return; }
+    }
     if (e.key !== 'Escape') return;
     if (bigImg) { bigImg = null; zoom = 1; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
   });
