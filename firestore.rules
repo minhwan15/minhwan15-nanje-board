@@ -11,6 +11,20 @@ service cloud.firestore {
     }
 
     // 수업 코드(room)마다 게시물 모음. 학생은 읽기와 새 글 쓰기만 가능, 수정·삭제는 불가.
+    // 태블릿마다 작성 중인 내용(교실 화면 '실시간 화면'). 태블릿 하나당 문서 하나를 덮어씀
+    match /rooms/{room}/drafts/{dev} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['dev', 'group', 'tab', 'data', 'updatedAt'])
+        && request.resource.data.dev == dev
+        && request.resource.data.group is int
+        && request.resource.data.group >= 1 && request.resource.data.group <= 5
+        && request.resource.data.tab is string && request.resource.data.tab.size() <= 10
+        && request.resource.data.data is map
+        && request.resource.data.data.size() <= 13
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
     match /rooms/{room}/posts/{postId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasOnly(['group', 'stage', 'data', 'createdAt'])

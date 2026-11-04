@@ -78,14 +78,18 @@ async function start(code) {
 
   let data = { latest: {}, comments: [], free: [] };
   let rows = [];
+  let drafts = []; // 태블릿별 작성 중인 내용
+  const TAB_LABEL = {};
+  STAGES_.forEach((s) => { TAB_LABEL[s.key] = s.short || s.label; });
+  TAB_LABEL.comment = '댓글 평가'; TAB_LABEL.free = '자유 게시';
   let bigImg = null; // { src, cap }
   let updated = 0;
   const viewKey = 'nb_view_' + act.id;
   let focus = 0;
   const seen = {};
   const VIEWS = nanje
-    ? [['all', '전체 진행'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']]
-    : [['all', '전체 진행']].concat(act.stages.map((x) => [x.key, x.short]), [['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']]);
+    ? [['all', '전체 진행'], ['live', '실시간 화면'], ['map', '마인드맵'], ['signal', '신호등'], ['solution', 'v1 → v2'], ['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']]
+    : [['all', '전체 진행'], ['live', '실시간 화면']].concat(act.stages.map((x) => [x.key, x.short]), [['comment', '댓글'], ['free', '사진·그림'], ['summary', '반 전체 정리']]);
   let view = store(viewKey);
   if (!VIEWS.some((v) => v[0] === view)) view = 'all';
   const studentUrl = location.origin + location.pathname.replace(/board(\.html)?$/, '') + '?room=' + encodeURIComponent(room.room);
@@ -132,7 +136,41 @@ async function start(code) {
   }
   const freeOf = (g) => data.free.filter((f) => Number(f.g) === g).slice().reverse();
 
+  // 실시간 화면: 모둠 태블릿마다 지금 보고 있는 탭과 쓰고 있는 내용(아직 안 올린 것 포함)
+  function letterOf(g, devId) {
+    const ids = drafts.filter((x) => x.g === g).map((x) => x.dev).sort();
+    return String.fromCharCode(65 + Math.max(0, ids.indexOf(devId)));
+  }
+  function secAgo(t) {
+    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    return s < 60 ? s + '초 전' : Math.floor(s / 60) + '분 전';
+  }
+  function draftBody(g, dr) {
+    const d = dr.d || {};
+    const filled = JSON.stringify(d).replace(/"_img":true/, '').match(/:"[^"]+"|:\["[^"]/);
+    const extra = d._img ? [h('span', { class: 'chip acc', text: '사진·그림 첨부함' })] : [];
+    if (!filled && !d._img) return [h('div', { class: 'empty small', text: '아직 쓰기 전' })];
+    if (dr.tab === 'comment') return [box('댓글 → ' + (d.to || '?') + '모둠 · 좋은 점', d.good), box('궁금한 점', d.question)];
+    if (dr.tab === 'free') return extra.concat([box('자유 게시 설명', d.memo)]);
+    const lo = {}; lo[dr.tab] = { d };
+    const v = nanje && (dr.tab === 'v1' || dr.tab === 'rebut' || dr.tab === 'v2') ? 'solution' : dr.tab;
+    return extra.concat(body(g, lo, v).filter((x) => x && !(x.classList && x.classList.contains('empty'))));
+  }
+  function liveContent(g) {
+    const list = drafts.filter((x) => x.g === g).sort((a, b) => b.t - a.t);
+    if (!list.length) return [h('div', { class: 'empty', text: '아직 접속한 태블릿이 없어요' })];
+    return list.map((dr) => {
+      const idle = Date.now() - dr.t > 90000;
+      return h('div', { class: 'live' + (idle ? ' idle' : '') }, [
+        h('div', { class: 'live-h' }, [h('b', { text: '태블릿 ' + letterOf(g, dr.dev) }), h('span', { class: 'live-tab', text: TAB_LABEL[dr.tab] || dr.tab }), h('span', { class: 'live-t', text: secAgo(dr.t) })]),
+        h('div', { class: 'live-b' }, draftBody(g, dr))
+      ]);
+    });
+  }
+  function typingCount(g) { return drafts.filter((x) => x.g === g && Date.now() - x.t < 30000).length; }
+
   function content(g) {
+    if (view === 'live') return liveContent(g);
     const out = body(g);
     // 전체 진행 화면에서는 단계 내용 아래에 최근 자유 게시 사진 2장까지
     if (view === 'all') {
@@ -142,15 +180,15 @@ async function start(code) {
     return out;
   }
 
-  function body(g) {
-    const l = data.latest[g] || {};
+  function body(g, lo, vo) {
+    const l = lo || data.latest[g] || {};
     const out = [];
-    const v = view === 'all' ? stageOf(g) : view;
+    const v = vo || (view === 'all' ? stageOf(g) : view);
     if (!v) return [h('div', { class: 'empty', text: '아직 올린 내용이 없어요' })];
     if (genStage(v)) {
       const d = l[v] && l[v].d;
       if (!d) return [h('div', { class: 'empty', text: genStage(v).short + ' 대기 중' })];
-      if (view === 'all') out.push(h('div', { class: 'lbl stage-t', text: genStage(v).label }));
+      if (view === 'all' && !lo) out.push(h('div', { class: 'lbl stage-t', text: genStage(v).label }));
       return out.concat(G.boardBody(genStage(v), d, pic).filter(Boolean));
     }
     if (v === 'map') {
@@ -173,7 +211,7 @@ async function start(code) {
       out.push(pic(d.img));
     } else if (v === 'v1' || v === 'rebut' || v === 'v2' || v === 'solution') {
       const v1 = l.v1 && l.v1.d, rb = l.rebut && l.rebut.d, v2 = l.v2 && l.v2.d;
-      if (!v1 && !v2) return [h('div', { class: 'empty', text: '해결책 대기 중' })];
+      if (!v1 && !v2 && !rb) return [h('div', { class: 'empty', text: '해결책 대기 중' })];
       if (v1) {
         out.push(box('해결책 v1', v1.solution));
         if (v1.fields && v1.fields.length) out.push(h('div', null, v1.fields.map((f) => h('span', { class: 'chip', text: f }))));
@@ -214,7 +252,8 @@ async function start(code) {
     return h('section', { class: 'col' + (fresh ? ' fresh' : ''), tabindex: '0', 'aria-label': g + '모둠', onclick: toggle,
       onkeydown: (e) => { if (e.key === 'Enter') toggle(); } }, [
       h('header', { class: 'col-h' }, [
-        h('div', { class: 'n' }, [g + '모둠' + (cur ? ' · 지금 ' + STAGES_.find((s) => s.key === cur).short : ''), ago(latestT, !!l[finalKey])]),
+        h('div', { class: 'n' }, [g + '모둠' + (cur ? ' · 지금 ' + STAGES_.find((s) => s.key === cur).short : ''), ago(latestT, !!l[finalKey]),
+          typingCount(g) ? h('span', { class: 'typing', text: '입력 중 ' + typingCount(g) }) : null]),
         h('div', { class: 't', text: TOPICS[g - 1] }),
         h('div', { class: 'dots', 'aria-hidden': 'true' }, STAGES_.map((s) => h('span', { class: 'dot' + (l[s.key] ? (s.key === cur ? ' now' : ' on') : '') })))
       ]),
@@ -412,9 +451,16 @@ async function start(code) {
     if (e.key !== 'Escape') return;
     if (bigImg) { bigImg = null; zoom = 1; render(); } else if (bigQr) { bigQr = false; render(); } else if (focus) { focus = 0; render(); }
   });
+  // 작성 중 내용은 자주 바뀌므로 1초에 한 번만 다시 그림 (그림 크게 보기·QR 크게 보기 중에는 멈춤)
+  let liveTimer = null;
+  const renderSoon = () => {
+    if (liveTimer) return;
+    liveTimer = setTimeout(() => { liveTimer = null; if (!bigImg && !bigQr) render(); }, 1000);
+  };
+  if (room.subscribeDrafts) room.subscribeDrafts((list) => { drafts = list; renderSoon(); }, () => {});
   room.subscribe((r) => { rows = r; data = summarize(r); updated = Date.now(); render(); },
     (err) => toast('연결이 끊겼어요: ' + err.message));
   render();
   // '몇 분 전' 표시 갱신 (크게 보기 중에는 건너뜀)
-  setInterval(() => { if (!focus && !bigImg && !bigQr) render(); }, 30000);
+  setInterval(() => { if (!bigImg && !bigQr && (view === 'live' || !focus)) render(); }, view === 'live' ? 10000 : 30000);
 }

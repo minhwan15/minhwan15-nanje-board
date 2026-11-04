@@ -49,6 +49,25 @@ async function start(code) {
   let tab = store(tabKey);
   if (!TABS.some((t) => t.key === tab)) tab = STAGES_[0].key;
   let summary = { latest: {}, comments: [], free: [] };
+  // 이 태블릿의 고유 번호(교실 화면 '실시간 화면'에서 태블릿을 구분)
+  let dev = store('nb_dev');
+  if (!dev) { dev = Math.random().toString(36).slice(2, 10); store('nb_dev', dev); }
+  let draftTimer = null, lastDraft = '', draftWarned = false;
+  function sendDraft(card) {
+    clearTimeout(draftTimer); draftTimer = null;
+    if (!group || !card || !room.saveDraft) return;
+    let d;
+    try { d = collectFields(card); } catch (e) { return; }
+    if (att && att.get()) d._img = true;
+    const body = JSON.stringify([group, tab, d]);
+    if (body === lastDraft || body.length > 9000) return;
+    lastDraft = body;
+    room.saveDraft(dev, group, tab, d).catch((e) => { if (!draftWarned) { draftWarned = true; console.warn('실시간 화면 저장 실패:', e.message); } });
+  }
+  function scheduleDraft(card) {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => sendDraft(card), 2000);
+  }
   let att = null; // 현재 폼의 사진·그림 첨부
 
   const headBox = h('div');
@@ -247,6 +266,11 @@ async function start(code) {
       }
     });
     card.appendChild(btn);
+    // 쓰는 동안 2초마다(멈췄을 때) 교실 화면에 보내기. 탭을 열자마자 한 번 보내 어느 탭인지 알림
+    card.addEventListener('input', () => scheduleDraft(card));
+    card.addEventListener('change', () => scheduleDraft(card));
+    card.addEventListener('click', (e) => { if (e.target.closest('.btn-ghost, .att-preview button')) setTimeout(() => scheduleDraft(card), 500); });
+    setTimeout(() => sendDraft(card), 300);
     if (tab !== 'free' && mine()[tab]) card.appendChild(h('div', { class: 'muted', text: '마지막으로 올린 시각 ' + new Date(mine()[tab].t).toLocaleTimeString('ko-KR') + ' · 고쳐서 다시 올려도 돼요' }));
     formBox.replaceChildren(card);
   }

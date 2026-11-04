@@ -169,3 +169,15 @@ textarea { min-height: 70px; resize: vertical; }
 .sum-final { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; align-items: start; }
 .sum-final .pic img { max-height: 180px; }
 .sum-final.noimg { grid-template-columns: 1fr; }
+
+/* 실시간 화면 */
+.typing { margin-left: 8px; background: var(--orange); color: #1A1A1A; border-radius: 6px; padding: 0 6px; font-weight: 900; }
+.live { border: 2px solid var(--teal); border-radius: 12px; background: #fff; overflow: hidden; }
+.live.idle { border-color: var(--line); opacity: .7; }
+.live-h { display: flex; align-items: center; gap: 8px; background: #E9EFEA; padding: 6px 10px; font-size: 15px; }
+.live-h b { color: var(--navy); }
+.live-tab { background: var(--navy); color: #fff; border-radius: 999px; padding: 1px 10px; font-weight: 700; font-size: 14px; }
+.live-t { margin-left: auto; color: var(--soft); font-variant-numeric: tabular-nums; }
+.live-b { padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; font-size: 17px; }
+.empty.small { padding: 6px; font-size: 14px; }
+.live-h { flex-wrap: wrap; } .live-h b, .live-tab, .live-t { white-space: nowrap; }

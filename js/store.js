@@ -21,8 +21,24 @@ async function firestoreStore(room) {
   const db = fs.getFirestore(app);
   const col = fs.collection(db, 'rooms', room, 'posts');
   const meta = fs.doc(db, 'rooms', room);
+  const draftCol = fs.collection(db, 'rooms', room, 'drafts');
   return {
     room,
+    // 태블릿마다 지금 쓰고 있는 내용(올리기 전)을 덮어써서 저장 → 교실 화면 '실시간 화면'
+    async saveDraft(dev, group, tab, data) {
+      await fs.setDoc(fs.doc(draftCol, dev), { dev, group: Number(group), tab, data, updatedAt: fs.serverTimestamp() });
+    },
+    subscribeDrafts(cb, onError) {
+      return fs.onSnapshot(draftCol, (snap) => {
+        const list = [];
+        snap.forEach((doc) => {
+          const v = doc.data();
+          const t = v.updatedAt && v.updatedAt.toMillis ? v.updatedAt.toMillis() : Date.now();
+          list.push({ dev: v.dev || doc.id, g: v.group, tab: v.tab, d: v.data || {}, t });
+        });
+        cb(list);
+      }, (err) => onError && onError(err));
+    },
     // 이 수업 코드가 어떤 활동인지(처음 교실 화면을 연 때 정해짐). 기록이 없으면 null
     async getAct() {
       const snap = await fs.getDoc(meta);
@@ -59,8 +75,22 @@ function demoStore(room) {
   if (chan) chan.onmessage = emit;
   window.addEventListener('storage', (e) => { if (e.key === key) emit(); });
   const metaKey = 'nanje-demo-meta-' + room;
+  const draftKey = 'nanje-demo-drafts-' + room;
+  const readDrafts = () => { try { return JSON.parse(localStorage.getItem(draftKey) || '{}'); } catch (e) { return {}; } };
+  const draftListeners = new Set();
+  const emitDrafts = () => { const m = readDrafts(); draftListeners.forEach((cb) => cb(Object.keys(m).map((k) => m[k]))); };
+  let dchan = null;
+  try { dchan = new BroadcastChannel(draftKey); dchan.onmessage = emitDrafts; } catch (e) { dchan = null; }
   return {
     room,
+    async saveDraft(dev, group, tab, data) {
+      const m = readDrafts();
+      m[dev] = { dev, g: Number(group), tab, d: data, t: Date.now() };
+      try { localStorage.setItem(draftKey, JSON.stringify(m)); } catch (e) { return; }
+      if (dchan) dchan.postMessage('changed');
+      emitDrafts();
+    },
+    subscribeDrafts(cb) { draftListeners.add(cb); emitDrafts(); return () => draftListeners.delete(cb); },
     async getAct() { try { return localStorage.getItem(metaKey); } catch (e) { return null; } },
     async setAct(act) { try { localStorage.setItem(metaKey, act); } catch (e) { /* 무시 */ } },
     async submit(group, stage, data) {
