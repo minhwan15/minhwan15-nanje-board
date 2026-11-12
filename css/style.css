@@ -207,3 +207,13 @@ textarea { min-height: 70px; resize: vertical; }
 .pres-b .pic img { max-height: 46vh; }
 .pres-f { display: flex; align-items: center; justify-content: center; gap: 20px; font-size: 20px; color: var(--soft); font-variant-numeric: tabular-nums; }
 .pres-f button:disabled { opacity: .4; cursor: default; }
+
+.guide { background: #FFF6EA; border: 1px solid #F0CFA6; border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.6; }
+.guide b { color: #C2541F; }
+.guide ol { margin: 6px 0 0; padding-left: 22px; }
+.guide li { margin: 2px 0; }
+.guide p { margin: 6px 0 0; font-size: 14px; }
+.pcard { display: flex; gap: 10px; align-items: center; background: #16323A; color: #F6F3EC; border-radius: 12px; padding: 12px 14px; }
+.pcard .pl { background: #E8A06F; color: #16323A; font-weight: 700; border-radius: 8px; padding: 2px 10px; white-space: nowrap; }
+.pcard p { flex: 1; margin: 0; font-size: 15px; line-height: 1.55; user-select: text; }
+.pcard .copy { background: #F6F3EC; color: #16323A; border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 700; white-space: nowrap; }
