@@ -258,7 +258,7 @@ async function start(code) {
       (d.rows || []).forEach((r) => {
         if (!r.claim) return;
         out.push(h('div', { class: 'sig' }, [h('i', { class: r.light || '', 'aria-label': ({ G: '초록', Y: '노랑', R: '빨강' })[r.light] || '미판정' }),
-          h('div', null, [h('div', { class: 'box', text: r.claim }), r.source ? h('div', { class: 'muted', text: '근거: ' + r.source }) : null])]));
+          h('div', null, [h('div', { class: 'box', text: r.claim }), r.aiSrc ? h('div', { class: 'muted', text: 'AI가 댄 출처: ' + r.aiSrc }) : null, r.source ? h('div', { class: 'muted', text: '확인 결과: ' + r.source }) : null])]));
       });
       out.push(pic(d.img));
     } else if (v === 'v1' || v === 'rebut' || v === 'v2' || v === 'solution') {
@@ -328,7 +328,7 @@ async function start(code) {
       total ? h('div', null, [bar, legend]) : h('div', { class: 'empty', text: '아직 신호등 판정이 없어요' }),
       reds.length ? h('div', { class: 'lbl', text: '확인되지 않은 내용' }) : null,
       h('div', { class: 'sum-list' }, reds.map((r) => h('div', { class: 'sig' }, [h('i', { class: r.light }),
-        h('div', null, [h('div', { class: 'box', text: r.claim }), h('div', { class: 'muted', text: r.g + '모둠' + (r.source ? ' · ' + r.source : '') })])])))
+        h('div', null, [h('div', { class: 'box', text: r.claim }), h('div', { class: 'muted', text: r.g + '모둠' + (r.aiSrc ? ' · AI 출처: ' + r.aiSrc : '') + (r.source ? ' · 확인: ' + r.source : '') })])])))
     ]);
   }
 
@@ -390,7 +390,7 @@ async function start(code) {
     const LBL = { map: '① 마인드맵', compare: '② AI 비교', signal: '③ 신호등', v1: '④ 해결책 v1', rebut: '⑤ AI 반론', v2: '⑥ 해결책 v2', comment: '댓글', free: '자유 게시' };
     const K = { env: '환경', eco: '경제', soc: '사회', tech: '기술', science: '과학 원리', common: '공통점', aiOnly: 'AI만', usOnly: '우리만',
       solution: '해결책', principle: '작동 원리', fields: '융합 학문', changed: '바뀐 점', to: '받는 모둠', good: '좋은 점', question: '궁금한 점', memo: '설명',
-      claim: '주장', source: '근거', light: '판정', summary: '반론', decision: '판단', reason: '이유' };
+      claim: '주장', aiSrc: 'AI 출처', source: '확인 결과', light: '판정', summary: '반론', decision: '판단', reason: '이유' };
     const LIGHT = { G: '초록', Y: '노랑', R: '빨강' };
     const flat = (d) => Object.keys(d).filter((k) => k !== 'img').map((k) => {
       const v = d[k];

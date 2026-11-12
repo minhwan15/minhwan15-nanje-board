@@ -217,3 +217,4 @@ textarea { min-height: 70px; resize: vertical; }
 .pcard .pl { background: #E8A06F; color: #16323A; font-weight: 700; border-radius: 8px; padding: 2px 10px; white-space: nowrap; }
 .pcard p { flex: 1; margin: 0; font-size: 15px; line-height: 1.55; user-select: text; }
 .pcard .copy { background: #F6F3EC; color: #16323A; border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 700; white-space: nowrap; }
+.sig .muted, .sig .box { overflow-wrap: anywhere; }
